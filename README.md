@@ -267,6 +267,4 @@ Each container taught a different lesson:
 
 ---
 
-## Author
 
-**Joshva** — building systems from scratch, one project at a time.
