@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <chrono>
 
 TEST(VectorTest, StartsEmpty) {
     ThreadSafeVector v;
@@ -10,7 +11,7 @@ TEST(VectorTest, StartsEmpty) {
     EXPECT_EQ(v.size(), 0);
 }
 
-TEST(VectorTest, SizeAfterPush) {
+TEST(VectorTest, SizeAfterPushBack) {
     ThreadSafeVector v;
     v.push_back([]{ });
     v.push_back([]{ });
@@ -62,4 +63,55 @@ TEST(VectorTest, ConcurrentPushes) {
         }));
     for (auto& t : threads) t.join();
     EXPECT_EQ(v.size(), 10);
+}
+
+TEST(VectorTest, WorkerProcessesTasks) {
+    ThreadSafeVector v;
+    std::atomic<int> count{0};
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 2; i++)
+        workers.push_back(std::thread([&v]{
+            while (true) {
+                auto task = v.pop_back();
+                if (!task) break;
+                (*task)();
+            }
+        }));
+    for (int i = 0; i < 10; i++)
+        v.push_back([&count]{ count++; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    v.stop();
+    for (auto& w : workers) w.join();
+    EXPECT_EQ(count, 10);
+}
+
+TEST(VectorTest, MultipleWorkers) {
+    ThreadSafeVector v;
+    std::atomic<int> count{0};
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 4; i++)
+        workers.push_back(std::thread([&v]{
+            while (true) {
+                auto task = v.pop_back();
+                if (!task) break;
+                (*task)();
+            }
+        }));
+    for (int i = 0; i < 20; i++)
+        v.push_back([&count]{ count++; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    v.stop();
+    for (auto& w : workers) w.join();
+    EXPECT_EQ(count, 20);
+}
+
+TEST(VectorTest, GetAfterPop) {
+    ThreadSafeVector v;
+    v.push_back([]{ });
+    v.push_back([]{ });
+    v.push_back([]{ });
+    EXPECT_EQ(v.size(), 3);
+    auto task = v.pop_back();
+    ASSERT_TRUE(task.has_value());
+    EXPECT_EQ(v.size(), 2);
 }

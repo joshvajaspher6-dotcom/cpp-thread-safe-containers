@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <chrono>
 
 TEST(QueueTest, StartsEmpty) {
     ThreadSafeQueue q;
@@ -74,23 +75,56 @@ TEST(QueueTest, ConcurrentPushPop) {
     std::atomic<int> count{0};
     std::vector<std::thread> producers;
     std::vector<std::thread> consumers;
-
     for (int i = 0; i < 5; i++)
         producers.push_back(std::thread([&q]{
             q.push([]{ });
         }));
-
     for (int i = 0; i < 5; i++)
         consumers.push_back(std::thread([&q, &count]{
             auto task = q.pop();
-            if (task) {
-                (*task)();
-                count++;
-            }
+            if (task) { (*task)(); count++; }
         }));
-
     for (auto& t : producers) t.join();
     for (auto& t : consumers) t.join();
-
     EXPECT_EQ(count, 5);
+}
+
+TEST(QueueTest, WorkerProcessesTasks) {
+    ThreadSafeQueue q;
+    std::atomic<int> count{0};
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 2; i++)
+        workers.push_back(std::thread([&q]{
+            while (true) {
+                auto task = q.pop();
+                if (!task) break;
+                (*task)();
+            }
+        }));
+    for (int i = 0; i < 10; i++)
+        q.push([&count]{ count++; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    q.stop();
+    for (auto& w : workers) w.join();
+    EXPECT_EQ(count, 10);
+}
+
+TEST(QueueTest, MultipleWorkers) {
+    ThreadSafeQueue q;
+    std::atomic<int> count{0};
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 4; i++)
+        workers.push_back(std::thread([&q]{
+            while (true) {
+                auto task = q.pop();
+                if (!task) break;
+                (*task)();
+            }
+        }));
+    for (int i = 0; i < 20; i++)
+        q.push([&count]{ count++; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    q.stop();
+    for (auto& w : workers) w.join();
+    EXPECT_EQ(count, 20);
 }

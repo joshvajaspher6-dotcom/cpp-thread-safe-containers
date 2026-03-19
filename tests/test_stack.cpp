@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <chrono>
 
 TEST(StackTest, StartsEmpty) {
     ThreadSafeStack s;
@@ -67,4 +68,44 @@ TEST(StackTest, ConcurrentPushes) {
         }));
     for (auto& t : threads) t.join();
     EXPECT_EQ(s.size(), 10);
+}
+
+TEST(StackTest, WorkerProcessesTasks) {
+    ThreadSafeStack s;
+    std::atomic<int> count{0};
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 2; i++)
+        workers.push_back(std::thread([&s]{
+            while (true) {
+                auto task = s.pop();
+                if (!task) break;
+                (*task)();
+            }
+        }));
+    for (int i = 0; i < 10; i++)
+        s.push([&count]{ count++; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    s.stop();
+    for (auto& w : workers) w.join();
+    EXPECT_EQ(count, 10);
+}
+
+TEST(StackTest, MultipleWorkers) {
+    ThreadSafeStack s;
+    std::atomic<int> count{0};
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 4; i++)
+        workers.push_back(std::thread([&s]{
+            while (true) {
+                auto task = s.pop();
+                if (!task) break;
+                (*task)();
+            }
+        }));
+    for (int i = 0; i < 20; i++)
+        s.push([&count]{ count++; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    s.stop();
+    for (auto& w : workers) w.join();
+    EXPECT_EQ(count, 20);
 }

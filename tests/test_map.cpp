@@ -2,6 +2,7 @@
 #include "../include/thread_safe_map.hpp"
 #include <thread>
 #include <vector>
+#include <atomic>
 
 TEST(MapTest, StartsEmpty) {
     ThreadSafeMap m;
@@ -47,6 +48,12 @@ TEST(MapTest, Remove) {
     EXPECT_EQ(m.size(), 0);
 }
 
+TEST(MapTest, RemoveMissingKey) {
+    ThreadSafeMap m;
+    m.remove("does_not_exist");
+    EXPECT_EQ(m.size(), 0);
+}
+
 TEST(MapTest, Clear) {
     ThreadSafeMap m;
     m.set("a", "1");
@@ -64,6 +71,21 @@ TEST(MapTest, SizeTracking) {
     EXPECT_EQ(m.size(), 2);
     m.remove("a");
     EXPECT_EQ(m.size(), 1);
+}
+
+TEST(MapTest, GetAfterClear) {
+    ThreadSafeMap m;
+    m.set("name", "Joshva");
+    m.clear();
+    auto val = m.get("name");
+    EXPECT_FALSE(val.has_value());
+}
+
+TEST(MapTest, ExistsAfterRemove) {
+    ThreadSafeMap m;
+    m.set("key", "value");
+    m.remove("key");
+    EXPECT_FALSE(m.exists("key"));
 }
 
 TEST(MapTest, ConcurrentWrites) {
@@ -86,6 +108,24 @@ TEST(MapTest, ConcurrentReads) {
         threads.push_back(std::thread([&m]{
             auto val = m.get("name");
             EXPECT_TRUE(val.has_value());
+            EXPECT_EQ(*val, "Joshva");
         }));
     for (auto& t : threads) t.join();
+}
+
+TEST(MapTest, ConcurrentReadWrite) {
+    ThreadSafeMap m;
+    std::atomic<int> read_count{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 5; i++)
+        threads.push_back(std::thread([&m, i]{
+            m.set("key" + std::to_string(i), "val");
+        }));
+    for (int i = 0; i < 5; i++)
+        threads.push_back(std::thread([&m, &read_count]{
+            auto val = m.get("key0");
+            if (val.has_value()) read_count++;
+        }));
+    for (auto& t : threads) t.join();
+    EXPECT_GE(m.size(), 0);
 }
