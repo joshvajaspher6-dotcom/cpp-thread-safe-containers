@@ -4,6 +4,8 @@ A collection of 5 thread safe data structures built from scratch in C++17.
 Each container is protected using the **monitor pattern**:
 `mutex` + `condition_variable` + `atomic`.
 
+Features an **interactive CLI menu** — select any container and operation at runtime.
+
 ---
 
 ## Containers
@@ -12,9 +14,9 @@ Each container is protected using the **monitor pattern**:
 |---|---|---|---|
 | `ThreadSafeQueue` | `std::queue` | FIFO | Thread pool tasks |
 | `ThreadSafeStack` | `std::stack` | LIFO | Undo system |
-| `ThreadSafeVector` | `std::vector` | Index access | Shared list |
+| `ThreadSafeVector` | `std::vector` | Back to front | Shared list |
 | `ThreadSafeList` | `std::list` | Front / Back | Priority tasks |
-| `ThreadSafeMap` | `std::unordered_map` | Key → Value | Shared cache |
+| `ThreadSafeMap` | `std::unordered_map` | Key Value | Shared cache |
 
 ---
 
@@ -22,14 +24,89 @@ Each container is protected using the **monitor pattern**:
 
 Every container uses the same **monitor pattern**:
 ```cpp
-std::mutex              mtx_;      // protects shared data
-std::condition_variable cv_;       // efficient sleeping and waking
-std::atomic<bool>       shutdown_; // fast shutdown flag
+mutable std::mutex              mtx_;
+std::condition_variable         cv_;
+std::atomic<bool>               shutdown_{false};
 ```
 
-- `push()` locks the mutex, adds the task, notifies one waiting thread
-- `pop()` sleeps efficiently until a task arrives or shutdown is signalled
+- `push()` locks mutex, adds task, notifies one waiting thread
+- `pop()` sleeps efficiently until task arrives or shutdown signalled
 - `stop()` sets shutdown flag and wakes all sleeping threads
+
+---
+
+## Interactive CLI Menu
+
+Run the demo and select any container and operation interactively:
+```
+╔═══════════════════════════════════╗
+║   Thread Safe Containers Demo     ║
+╠═══════════════════════════════════╣
+║  Select a container:              ║
+║                                   ║
+║  1. ThreadSafeQueue  (FIFO)       ║
+║  2. ThreadSafeStack  (LIFO)       ║
+║  3. ThreadSafeVector (Index)      ║
+║  4. ThreadSafeList   (Front/Back) ║
+║  5. ThreadSafeMap    (Key-Value)  ║
+║  6. Run ALL demos                 ║
+║  0. Exit                          ║
+╚═══════════════════════════════════╝
+```
+
+### Queue Operations
+```
+1. Push a task
+2. Push multiple tasks
+3. Start workers
+4. Show size
+5. Check if empty
+6. Stop and join workers
+```
+
+### Stack Operations
+```
+1. Push a task
+2. Push multiple tasks
+3. Start workers
+4. Show size
+5. Check if empty
+6. Stop and join workers
+```
+
+### Vector Operations
+```
+1. Push a task
+2. Push multiple tasks
+3. Get task by index
+4. Start workers
+5. Show size
+6. Check if empty
+7. Stop and join workers
+```
+
+### List Operations
+```
+1. Push to back  (normal priority)
+2. Push to front (high priority)
+3. Push multiple to back
+4. Peek at front
+5. Start workers
+6. Show size
+7. Check if empty
+8. Stop and join workers
+```
+
+### Map Operations
+```
+1. Set key value
+2. Get value by key
+3. Remove key
+4. Check if key exists
+5. Show size
+6. Check if empty
+7. Clear all
+```
 
 ---
 
@@ -72,45 +149,7 @@ cmake --build .
 ./demo
 ```
 
-Expected output:
-```
-=== Thread Safe Containers Demo ===
-
-=== ThreadSafeQueue (FIFO) ===
-  Queue task A
-  Queue task B
-  Queue task C
-  Queue task D
-
-=== ThreadSafeStack (LIFO) ===
-  Stack task D
-  Stack task C
-  Stack task B
-  Stack task A
-
-=== ThreadSafeVector ===
-  Vector task C
-  Vector task B
-  Vector task A
-
-=== ThreadSafeList ===
-  List task PRIORITY — runs first!
-  List task A — normal
-  List task B — normal
-
-=== ThreadSafeMap ===
-  name = Joshva
-  age = 20
-  language = C++
-  exists name? yes
-  exists xyz?  no
-  size = 4
-  after remove age, size = 3
-  get age after remove = nullopt
-  after clear, size = 0
-
-=== All demos complete ===
-```
+Select any container from the menu. Push tasks. Start workers. Watch them run.
 
 ---
 
@@ -131,18 +170,30 @@ Or run individually:
 
 Expected:
 ```
-100% tests passed, 0 tests failed
+Test project cpp-thread-safe-containers
+    Start 1: QueueTest
+1/5 Test #1: QueueTest  ........... Passed
+    Start 2: StackTest
+2/5 Test #2: StackTest  ........... Passed
+    Start 3: VectorTest
+3/5 Test #3: VectorTest ........... Passed
+    Start 4: ListTest
+4/5 Test #4: ListTest   ........... Passed
+    Start 5: MapTest
+5/5 Test #5: MapTest    ........... Passed
+
+100% tests passed, 0 tests failed out of 5
 ```
 
 ---
 
-## Container Differences
+## Container Behaviour
 ```
-QUEUE  → first in first out  → oldest task runs first
-STACK  → last in first out   → newest task runs first
-VECTOR → back to front       → index access available
-LIST   → front to back       → push_front for priority tasks
-MAP    → key value pairs     → no tasks, stores data
+QUEUE  → push A B C → runs A B C    (first in first out)
+STACK  → push A B C → runs C B A    (last in first out)
+VECTOR → push A B C → runs C B A    (back to front)
+LIST   → push_back A B, push_front P → runs P A B  (priority first)
+MAP    → set/get/remove by key      (no task queue)
 ```
 
 ---
@@ -157,18 +208,50 @@ MAP    → key value pairs     → no tasks, stores data
 | `std::condition_variable` | Efficient thread sleeping and waking |
 | `std::atomic<bool>` | Fast thread safe shutdown flag |
 | `std::optional` | Return value that might be empty |
-| `std::move` | Move tasks into queue without copying |
+| `std::move` | Move tasks into container without copying |
 | `std::function` | Store any callable as a task |
+
+---
+
+## Monitor Pattern
+
+All containers follow the same pattern:
+```
+push():
+  lock mutex
+  add to container
+  unlock mutex
+  notify_one() — wake one worker
+
+pop():
+  lock mutex
+  cv.wait() — sleep if empty
+  take from container
+  unlock mutex
+  return task
+
+stop():
+  shutdown_ = true
+  notify_all() — wake every worker
+  workers see nullopt — exit
+```
 
 ---
 
 ## Why I Built This
 
-This project is the learning foundation before building a full
+This project is the **learning foundation** before building a full
 **C++ Thread Pool** from scratch.
 
 Understanding how thread safe containers work internally is essential
 for building production grade concurrent systems.
+
+Each container taught a different lesson:
+- **Queue** — the core thread pool task queue pattern
+- **Stack** — LIFO scheduling and priority inversion
+- **Vector** — index based access with concurrency
+- **List** — push_front for priority task insertion
+- **Map** — key value storage without task queuing
 
 **Next project:** [cpp-thread-pool](https://github.com/joshvajasubre6-dotcom/cpp-thread-pool)
 
@@ -180,6 +263,10 @@ for building production grade concurrent systems.
 - Build: CMake 3.14+
 - Testing: Google Test
 - Threading: POSIX Threads (pthread)
+- Platform: Linux
 
 ---
 
+## Author
+
+**Joshva** — building systems from scratch, one project at a time.
