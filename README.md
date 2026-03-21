@@ -253,7 +253,7 @@ Each container taught a different lesson:
 - **List** — push_front for priority task insertion
 - **Map** — key value storage without task queuing
 
-**Next project:** [cpp-thread-pool](https://github.com/joshvajasubre6-dotcom/cpp-thread-pool)
+**Next project:** [cpp-thread-pool](https://github.com/joshvajaspher6-dotcom/cpp-thread-pool)
 
 ---
 
